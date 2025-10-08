@@ -43,17 +43,11 @@ fn large_scale_deposits_should_sum_correctly() {
     for line in stdout.lines() {
         if line.starts_with("1,") {
             found_client1 = true;
-            assert!(
-                line.contains("50000.0"),
-                "Client 1 balance mismatch: {line}"
-            );
+            assert!(line.contains("50000"), "Client 1 balance mismatch: {line}");
         }
         if line.starts_with("2,") {
             found_client2 = true;
-            assert!(
-                line.contains("50000.0"),
-                "Client 2 balance mismatch: {line}"
-            );
+            assert!(line.contains("50000"), "Client 2 balance mismatch: {line}");
         }
     }
 
@@ -100,16 +94,10 @@ fn large_deposit_then_withdraw_should_end_at_zero() {
     // ---- Check both clients have zero available/total ----
     for line in stdout.lines() {
         if line.starts_with("1,") {
-            assert!(
-                line.contains("0.0"),
-                "Client 1 should have 0 balance: {line}"
-            );
+            assert!(line.contains("0"), "Client 1 should have 0 balance: {line}");
         }
         if line.starts_with("2,") {
-            assert!(
-                line.contains("0.0"),
-                "Client 2 should have 0 balance: {line}"
-            );
+            assert!(line.contains("0"), "Client 2 should have 0 balance: {line}");
         }
     }
 }

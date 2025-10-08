@@ -78,7 +78,7 @@ impl From<u32> for TransactionId {
 }
 
 /// Newtype to handle decimal ammounts.
-#[derive(Debug, Serialize, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) struct Amount(Decimal);
 
 /// Custom deserializer for Amount. Ensures that the amount is non-negative and rounded to 4 decimal places.
@@ -97,6 +97,18 @@ impl<'de> Deserialize<'de> for Amount {
         Ok(decimal
             .round_dp_with_strategy(4, rust_decimal::RoundingStrategy::ToZero)
             .into())
+    }
+}
+
+/// Custom serializer so that the amount is normalized when outputed as a string. (e.g. 1.0 is displayed as 1)
+impl Serialize for Amount {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let normalized = self.0.normalize();
+
+        rust_decimal::serde::str::serialize(&normalized, serializer)
     }
 }
 
