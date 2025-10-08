@@ -17,17 +17,17 @@ The following diagram showcases the design of the application.
 ![Design Diagram](design.svg)
 
 The input file is parsed by the `csv_reader` module. There is a `Transaction` structure that matches the fields in the CSV file. A custom deserializer is used in order check if the amount value in the CSV is negative and also to round it to 4 decimal places.
-The application will skip any row that has a negative amount or an invalid format. Also amounts that are not rounded to 4 decimal places will be automatically rounded (e.g. 1.9999999 will be rounded to 1.9999 and 1.49999 will be rounded to 1.4999).
+The application will skip any row that has a negative amount or an invalid format. Also amounts that are not rounded to 4 decimal places will be automatically rounded (e.g. `1.9999999` will be rounded to `1.9999` and `1.49999` will be rounded to `1.4999`).
 
 The application accepts inputs that have the header specified in the file `type, client, tx, amount` but will accepts files that don't have the header as long as the order of the fields is preserved in each row. Each row that fails to de-serialize will be ignored by the application.
 
 The CSV reader uses an iterator to iterate over every single row. Once an entry in the file is parsed, it is sent to a worker task for processing.
-There is a stable set of workers that are spawned when the application starts and they will continue running until the input is finished. Each worker serves a set of clients. To determine which worker should serve a client, a simple hash function.
+There is a stable set of workers that are spawned when the application starts and they will continue running until the input is finished. Each worker serves a set of clients. To determine which worker should serve a client, a simple hash function is used.
 
 The `transaction_processor` module contains the logic to process transactions. It reads transaction messages from a queue. It also holds one or more accounts and processes each message accordingly.
 If an error occurs with a transaction, it will be logged to stderr and the processor will continue with the next transaction.
 
-The business logic used to update the balances of the account is contained in the `account` module, more specifically the `Account` struct. This struct contains methods for depositing and withdrawing, disputing, resolving disputes and issuing chargebacks.
+The business logic used to update the balances of the account is contained in the `account` module, more specifically the `Account` struct. This struct contains methods for depositing, withdrawing, disputing, resolving disputes and issuing chargebacks.
 There are a number of errors that can happen when processing transactions which are specified in the `AccountError`.
 
 The assumptions are that:
@@ -43,6 +43,7 @@ Because there can be billions of transactions that cn be processed for an accoun
 This cache will store deposit and withdraw transactions and will keep only the most recently used transactions in memory. Each cache is initialized with a fixed capacity. When this size is exceeded the least recently used items are evicted from memory into a backing store database.
 
 There are several implementations for the backing store database in the `transaction_cache` module. This is because the implementation was started using `sled` as a backing store which turned out to consume more memory than expected. The next storage backend implemented was `rocksdb` which worked well to limit memory usage but was really slow to compile. The default implementation now uses a simple KV store implemented using SQLite. There is still support for the `rocksdb` implementation using an optional feature.
+Another implementation that was considered was to encode each transaction with bincode and serialize it to disk in a separate file (the filename would be the transaction id). Ultimatelly this may be problematic since the number of files may be exceeded on some filesystems. It would be better to bundle up multiple transactions in a single file but that would mean either implementing an index or searching linearly through the file (on a slow media). Instead of re-inventing the wheel I chose to evaluate well established KV storage options.
 
 The `test_cache_memory_usage` integration test was used to validate the memory consumption. It's also the reason that the `transaction_cache` module is public.
 
@@ -50,8 +51,10 @@ The `test_cache_memory_usage` integration test was used to validate the memory c
 
 Although the payment workers are async tasks, the operation that does the most IO which is the eviction of the transactions to disk does not currently use an async interface. It's worth implementing an async interface for the cache in the future.
 
-The current scaling strategy of the application is to distribute distinct clients into distinct workers. This would provide a more uniform QOS for clients so that one client who put in a transaction later is not starved by a client that has issued a large number of transactions. Still this can happen right now pe worker even though we distribute client sets across workers.
-A priority scheme with a more fair QOS can be implemented potentially.
+The current scaling strategy of the application is to distribute distinct clients into distinct workers. This would provide a more uniform QOS for clients so that it reduces the posibility that one clients transactions are staving another ones. Still it can happen that on a worker that is serving 2 or clients, one client who put in a transaction later is starved by a client that has issued a large number of transactions before that.
+A priority scheme with a more fair QOS can be implemented potentially per worker.
+
+The cache can be improved in order to support bulk eviction. Now the cache evicts one entry at a time to disk when it reaches its capacity limit. A bulk eviction would make more sense, especially in the case where transaction IDs are ordered.
 
 A more comprehensive test suite needs to be implemented also.
 
